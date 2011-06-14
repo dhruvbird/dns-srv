@@ -140,7 +140,7 @@ function tryConnect(socket, addrs) {
     // console.error("tryConnect::", new Error().stack.toString());
 
     // Save original listeners
-    var _add_old_listeners = removeAllListeners(socket);
+    var _add_old_listeners = removeListeners(socket);
 
     var onConnect = function() {
 	// console.error('srv.js::connected!!');

@@ -166,8 +166,8 @@ function tryConnect(socket, addrs, timeout) {
 	if (!e) {
 	    socket.destroy();
 	}
-        error = e || error;
-        connectNext();
+	error = e || new Error('Connection timed out');
+	connectNext();
     };
     var connectNext = function() {
 	// console.error("srv.js::addrs:", addrs);

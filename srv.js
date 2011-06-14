@@ -6,6 +6,16 @@ function compareNumbers(a, b) {
     return (a < b ? -1 : (a > b ? 1 : 0));
 }
 
+function once(proc) {
+    var _fired = false;
+    return function() {
+	if (!_fired) {
+	    _fired = true;
+	    proc.apply(this, arguments);
+	}
+    };
+}
+
 function groupSrvRecords(addrs) {
     var groups = {};  // by priority
     addrs.forEach(function(addr) {
@@ -122,7 +132,7 @@ function removeListeners(emitter, events) {
 	_keys.forEach(function(event) {
 	    if (!done.hasOwnProperty(event)) {
 		done[event] = 1;
-		var _cl = _events[event];
+		var _cl = _events[event] || [ ];
 		_cl.unshift(0, 0);
 		if (remove_prev_listeners) {
 		    emitter.removeAllListeners(event);
@@ -136,7 +146,7 @@ function removeListeners(emitter, events) {
 
 
 // connection attempts to multiple addresses in a row
-function tryConnect(socket, addrs) {
+function tryConnect(socket, addrs, timeout) {
     // console.error("tryConnect::", new Error().stack.toString());
 
     // Save original listeners
@@ -153,13 +163,17 @@ function tryConnect(socket, addrs) {
     var error;
     var onError = function(e) {
 	// console.error("srv.js::onError, e:", e, addrs);
-        error = e;
+	if (!e) {
+	    socket.destroy();
+	}
+        error = e || error;
         connectNext();
     };
     var connectNext = function() {
 	// console.error("srv.js::addrs:", addrs);
         var addr = addrs.shift();
         if (addr) {
+	    socket.setTimeout(timeout, function() { });
             socket.connect(addr.port, addr.name);
 	}
         else {
@@ -173,6 +187,8 @@ function tryConnect(socket, addrs) {
     // Add our listeners
     socket.addListener('connect', onConnect);
     socket.addListener('error', onError);
+    socket.addListener('timeout', onError);
+
     connectNext();
 }
 
@@ -181,28 +197,32 @@ exports.removeListeners = removeListeners;
 
 
 // returns EventEmitter with 'connect' & 'error'
-exports.connect = function(socket, services, domain, defaultPort) {
+exports.connect = function(socket, services, domain, defaultPort, timeout) {
+    // console.error("connect:services", services);
 
+    timeout = timeout || 10000; // 10 sec timeout
     var tryServices;
     tryServices = function() {
         var service = services.shift();
         if (service) {
+	    // console.error("Trying to resolve SRV");
             resolveSrv(service + '.' + domain, function(error, addrs) {
                 if (addrs) {
-                    tryConnect(socket, addrs);
+                    tryConnect(socket, addrs, timeout);
 		}
                 else {
                     tryServices();
 		}
             });
         } else {
+	    // console.error("Trying to resolve host");
             resolveHost(domain, function(error, addrs) {
                 if (addrs && addrs.length > 0) {
                     addrs = addrs.map(function(addr) {
                         return { name: addr,
                                  port: defaultPort };
                     });
-                    tryConnect(socket, addrs);
+                    tryConnect(socket, addrs, timeout);
                 }
 		else {
                     socket.emit('error', error || new Error('No addresses resolved for ' + domain));

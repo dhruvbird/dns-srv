@@ -90,13 +90,18 @@ function resolveSrv(name, cb) {
     });
 }
 
+function getAllEvents(emitter) {
+    return Object.keys(emitter._events || { }).filter(function(event) {
+	return event !== 'maxListeners';
+    });
+}
+
 
 
 function removeListeners(emitter, events) {
+
     if (typeof events === 'undefined') {
-	events = Object.keys(emitter._events || { }).filter(function(event) {
-	    return event !== 'maxListeners';
-	});
+	events = getAllEvents(emitter);
     }
     else if (typeof events === 'string') {
 	events = [ events ];
@@ -112,14 +117,19 @@ function removeListeners(emitter, events) {
     });
 
     return function(remove_prev_listeners) {
-	Object.keys(_events).forEach(function(event) {
-	    var _cl = _events[event];
-	    _cl.unshift(0, 0);
-	    if (remove_prev_listeners) {
-		emitter.removeAllListeners();
+	var _keys = Object.keys(_events).concat(events);
+	var done = { };
+	_keys.forEach(function(event) {
+	    if (!done.hasOwnProperty(event)) {
+		done[event] = 1;
+		var _cl = _events[event];
+		_cl.unshift(0, 0);
+		if (remove_prev_listeners) {
+		    emitter.removeAllListeners(event);
+		}
+		var _l = emitter.listeners(event);
+		_l.splice.apply(_l, _cl);
 	    }
-	    var _l = emitter.listeners(event);
-	    _l.splice.apply(_l, _cl);
 	});
     };
 }

@@ -39,6 +39,23 @@ function groupSrvRecords(addrs) {
     return result;
 }
 
+// one of both A & AAAA, in case of broken tunnels
+function resolveHost(name, cb) {
+    // console.error("resolveHost::", new Error().stack.toString());
+    var error, results = [];
+    var cb1 = function(e, addr) {
+        error = error || e;
+        if (addr) {
+            results.push(addr);
+	}
+
+        cb((results.length > 0) ? null : error, results);
+    };
+
+    dns.lookup(name, cb1);
+}
+
+
 function resolveSrv(name, cb) {
     dns.resolveSrv(name, function(err, addrs) {
         if (err) {
@@ -73,32 +90,38 @@ function resolveSrv(name, cb) {
     });
 }
 
-// one of both A & AAAA, in case of broken tunnels
-function resolveHost(name, cb) {
-    // console.error("resolveHost::", new Error().stack.toString());
-    var error, results = [];
-    var cb1 = function(e, addr) {
-        error = error || e;
-        if (addr) {
-            results.push(addr);
-	}
 
-        cb((results.length > 0) ? null : error, results);
+
+function removeListeners(emitter, events) {
+    if (typeof events === 'undefined') {
+	events = Object.keys(emitter._events || { }).filter(function(event) {
+	    return event !== 'maxListeners';
+	});
+    }
+    else if (typeof events === 'string') {
+	events = [ events ];
+    }
+    else if (!(events instanceof Array)) {
+	throw new Error("'events' must be either undefined, a string, or an array of events");
+    }
+
+    var _events = { };
+    events.forEach(function(event) {
+	var _l = emitter.listeners(event);
+	_events[event] = _l.splice(0, _l.length);
+    });
+
+    return function(remove_prev_listeners) {
+	Object.keys(_events).forEach(function(event) {
+	    var _cl = _events[event];
+	    _cl.unshift(0, 0);
+	    if (remove_prev_listeners) {
+		emitter.removeAllListeners();
+	    }
+	    var _l = emitter.listeners(event);
+	    _l.splice.apply(_l, _cl);
+	});
     };
-
-    dns.lookup(name, cb1);
-}
-
-function addListeners(emitter, event, listeners) {
-    var _l = emitter.listeners(event);
-    listeners.unshift(0, 0);
-    _l.splice.apply(_l, listeners);
-}
-
-function extractAllListeners(emitter, event) {
-    var listeners = emitter.listeners(event);
-    listeners = listeners.splice(0, listeners.length);
-    return listeners;
 }
 
 
@@ -107,17 +130,11 @@ function tryConnect(socket, addrs) {
     // console.error("tryConnect::", new Error().stack.toString());
 
     // Save original listeners
-    // TODO: Also unhook the 'close' event listeners
-    var _c_listeners = extractAllListeners(socket, 'connect');
-    var _e_listeners = extractAllListeners(socket, 'error');
+    var _add_old_listeners = removeAllListeners(socket);
 
     var onConnect = function() {
 	// console.error('srv.js::connected!!');
-        socket.removeListener('connect', onConnect);
-        socket.removeListener('error', onError);
-
-	addListeners(socket, 'connect', _c_listeners);
-	addListeners(socket, 'error',   _e_listeners);
+	_add_old_listeners(true);
 
         // done!
         socket.emit('connect');
@@ -137,12 +154,7 @@ function tryConnect(socket, addrs) {
 	}
         else {
 	    // console.error("Emitting ERROR in srv.js");
-
-            socket.removeListener('connect', onConnect);
-            socket.removeListener('error', onError);
-
-	    addListeners(socket, 'connect', _c_listeners);
-	    addListeners(socket, 'error',   _e_listeners);
+	    _add_old_listeners(true);
 
             socket.emit('error', error || new Error('No addresses to connect to'));
 	}
@@ -154,10 +166,15 @@ function tryConnect(socket, addrs) {
     connectNext();
 }
 
+
+exports.removeListeners = removeListeners;
+
+
 // returns EventEmitter with 'connect' & 'error'
 exports.connect = function(socket, services, domain, defaultPort) {
 
-    var tryServices = function() {
+    var tryServices;
+    tryServices = function() {
         var service = services.shift();
         if (service) {
             resolveSrv(service + '.' + domain, function(error, addrs) {

@@ -117,7 +117,7 @@ function removeListeners(emitter, events) {
     });
 
     return function(remove_prev_listeners) {
-	var _keys = Object.keys(_events).concat(events);
+	var _keys = Object.keys(_events).concat(getAllEvents(emitter));
 	var done = { };
 	_keys.forEach(function(event) {
 	    if (!done.hasOwnProperty(event)) {

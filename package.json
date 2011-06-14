@@ -1,26 +1,25 @@
 {
-  "author": { "name": "Astro",
-    "email": "astro@spaceboyz.net",
-    "web": "http://spaceboyz.net/~astro/"
-  },
+  "author": "Astro <astro@spaceboyz.net> (http://spaceboyz.net/~astro/)",
   "name": "dns-srv",
   "main": "srv.js",
   "description": "A small library to help connect using DNS SRV records on node.js",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "homepage": "https://github.com/dhruvbird/dns-srv",
   "repository": {
     "type": "git",
     "url": "git://github.com/dhruvbird/dns-srv.git"
   },
-  "contributors": [{"name":"Dhruv Matani",
-      "email":"dhruvbird@gmail.com",
-      "url":"https://dhruvbird.com/"
-    }
+  "contributors": [
+    "Dhruv Matani <dhruvbird@gmail.com> (https://dhruvbird.com/)"
   ],
   "engines": {
     "node": ">=0.4.0"
   },
-  "licenses": [{"type": "MIT"}],
+  "licenses": [
+    {
+      "type": "MIT"
+    }
+  ],
   "dependencies": {},
   "devDependencies": {}
 }

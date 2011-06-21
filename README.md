@@ -1,0 +1,13 @@
+
+Usage:
+
+{{{
+var srv = require('dns-srv');
+var net = require('net');
+
+var sock = new net.Stream();
+srv.connect(sock, ['_xmpp-client._tcp'], "gmail.com", 5222);
+
+sock.on('error', function() { console.error('meh...'); })
+    .on('connect', function() { console.log('yeah baby!!'); });
+}}}

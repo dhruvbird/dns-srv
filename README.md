@@ -1,5 +1,8 @@
+# dns-srv
 
-Usage:
+A module to query SRV records from DNS servers
+
+Usage: To query the '_xmpp-client._tcp'SRV record of 'gmail.com'
 
     var srv = require('dns-srv');
     var net = require('net');

@@ -1,3 +1,4 @@
+[![build status](https://secure.travis-ci.org/dhruvbird/dns-srv.png)](http://travis-ci.org/dhruvbird/dns-srv)
 # dns-srv
 
 A module to query SRV records from DNS servers

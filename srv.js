@@ -1,4 +1,18 @@
+// -*-  tab-width:4; c-basic-offset: 4; indent-tabs-mode: nil  -*-
+
+// NOTE: NEVER re-attach OR trigger event handlers in a nextTick()
+// function. ALWAYS do it in the same tick since there might be
+// pending events and the semantics might need a sequential ordering
+// on the delivery of these events (for example the 'connect' and the
+// 'data' events need to come in the order they arrived).
+
 var dns = require('dns');
+
+const REMOVE_PREVIOUS_LISTENERS = true;
+const RETAIN_PREVIOUS_LISTENERS = false;
+
+exports.REMOVE_PREVIOUS_LISTENERS = REMOVE_PREVIOUS_LISTENERS;
+exports.RETAIN_PREVIOUS_LISTENERS = RETAIN_PREVIOUS_LISTENERS;
 
 function compareNumbers(a, b) {
     a = parseInt(a, 10);
@@ -9,10 +23,10 @@ function compareNumbers(a, b) {
 function once(proc) {
     var _fired = false;
     return function() {
-	if (!_fired) {
-	    _fired = true;
-	    proc.apply(this, arguments);
-	}
+        if (!_fired) {
+            _fired = true;
+            proc.apply(this, arguments);
+        }
     };
 }
 
@@ -21,7 +35,7 @@ function groupSrvRecords(addrs) {
     addrs.forEach(function(addr) {
         if (!groups.hasOwnProperty(addr.priority)) {
             groups[addr.priority] = [];
-	}
+        }
 
         groups[addr.priority].push(addr);
     });
@@ -40,11 +54,11 @@ function groupSrvRecords(addrs) {
             totalWeight += addr.weight;
             if (w < totalWeight) {
                 candidate = addr;
-	    }
+            }
         });
         if (candidate) {
             result.push(candidate);
-	}
+        }
     });
     return result;
 }
@@ -57,7 +71,7 @@ function resolveHost(name, cb) {
         error = error || e;
         if (addr) {
             results.push(addr);
-	}
+        }
 
         cb((results.length > 0) ? null : error, results);
     };
@@ -81,18 +95,18 @@ function resolveSrv(name, cb) {
                     cb(results ? null : error, results);
                 }
             };
-	    var gSRV = groupSrvRecords(addrs);
-	    pending = gSRV.length;
-	    gSRV.forEach(function(addr) {
+            var gSRV = groupSrvRecords(addrs);
+            pending = gSRV.length;
+            gSRV.forEach(function(addr) {
                 resolveHost(addr.name, function(e, a) {
                     if (a) {
                         a = a.map(function(a1) {
                             return {
-				name: a1,
+                                name: a1,
                                 port: addr.port
-			    };
+                            };
                         });
-		    }
+                    }
                     cb1(e, a);
                 });
             });
@@ -100,50 +114,70 @@ function resolveSrv(name, cb) {
     });
 }
 
+/* Enumerates all the events on 'emitter' and returns them as a list
+ * of strings.
+ */
 function getAllEvents(emitter) {
     return Object.keys(emitter._events || { }).filter(function(event) {
-	return event !== 'maxListeners';
+        return event !== 'maxListeners';
     });
 }
 
-
-
+/* This function removes all the event handlers for the event(s)
+ * listen in 'events'. If 'events' in undefined, this function
+ * enumerates all events on 'emitter' and removes them all. The return
+ * value is a function which can be called to re-attach the removed
+ * handlers.
+ *
+ * The only parameter that this returned function takes in a boolean
+ * (true/false) which indicates whether existing handlers should be
+ * removed (true) or kept (false) before re-attaching all the old
+ * handlers. This applies for *all* events, not just events that will
+ * be re-attached.
+ *
+ */
 function removeListeners(emitter, events) {
-
     if (typeof events === 'undefined') {
-	events = getAllEvents(emitter);
-    }
-    else if (typeof events === 'string') {
-	events = [ events ];
-    }
-    else if (!(events instanceof Array)) {
-	throw new Error("'events' must be either undefined, a string, or an array of events");
+        events = getAllEvents(emitter);
+    } else if (typeof events === 'string') {
+        events = [ events ];
+    } else if (!(events instanceof Array)) {
+        throw new Error("'events' must be either undefined, a string, or an array of events");
     }
 
     var _events = { };
     events.forEach(function(event) {
-	var _l = emitter.listeners(event);
-	_events[event] = _l.splice(0, _l.length);
+        var _l = emitter.listeners(event);
+        // Make a private copy (in case emitter.listeners() returns a
+        // cached copy).
+        _events[event] = _l.splice(0, _l.length);
     });
 
-    return function(remove_prev_listeners) {
-	var _keys = Object.keys(_events).concat(getAllEvents(emitter));
-	var done = { };
-	_keys.forEach(function(event) {
-	    if (!done.hasOwnProperty(event)) {
-		done[event] = 1;
-		var _cl = _events[event] || [ ];
-		_cl.unshift(0, 0);
-		if (remove_prev_listeners) {
-		    emitter.removeAllListeners(event);
-		}
-		var _l = emitter.listeners(event);
-		_l.splice.apply(_l, _cl);
-	    }
-	});
+    return function(prev_listeners_fate) {
+        var _keys = Object.keys(_events).concat(getAllEvents(emitter));
+        var done = { };
+        _keys.forEach(function(event) {
+            if (!done.hasOwnProperty(event)) {
+                // console.error("Re-attaching handler for the '" + event + "' event");
+                done[event] = 1;
+                // Ensure that _cl is an array we (and not the emitter) own.
+                var _cl = (_events[event] || [ ]).concat();
+                if (prev_listeners_fate === REMOVE_PREVIOUS_LISTENERS) {
+                    emitter.removeAllListeners(event);
+                }
+                if (_cl.length > 0) {
+                    if (!emitter._events[event]) {
+                        emitter._events[event] = [ ];
+                    } else if (!(emitter._events[event] instanceof Array)) {
+                        emitter._events[event] = [ emitter._events[event] ];
+                    }
+                    // emitter._events[event] is now an array.
+                    emitter._events[event] = emitter._events[event].concat(_cl);
+                }
+            }
+        });
     };
 }
-
 
 // connection attempts to multiple addresses in a row
 function tryConnect(socket, addrs, timeout) {
@@ -153,69 +187,64 @@ function tryConnect(socket, addrs, timeout) {
     var _add_old_listeners = removeListeners(socket);
 
     var onConnect = function() {
-	// console.error('srv.js::connected!!');
-	_add_old_listeners(true);
-
+        // console.error('srv.js::connected!!');
+        _add_old_listeners(true);
         // done!
         socket.emit('connect');
     };
 
     var error;
     var onError = function(e) {
-	// console.error("srv.js::onError, e:", e, addrs);
-	if (!e) {
-	    socket.destroy();
-	}
-	error = e || new Error('Connection timed out');
-	connectNext();
+    // console.error("srv.js::onError, e:", e, addrs);
+        if (!e) {
+            socket.destroy();
+        }
+        error = e || new Error('Connection timed out');
+        connectNext();
     };
     var connectNext = function() {
-	// console.error("srv.js::addrs:", addrs);
+        // console.error("srv.js::addrs:", addrs);
         var addr = addrs.shift();
         if (addr) {
-	    socket.setTimeout(timeout, function() { });
+            socket.setTimeout(timeout, function() { });
             socket.connect(addr.port, addr.name);
-	}
+        }
         else {
-	    // console.error("Emitting ERROR in srv.js");
-	    _add_old_listeners(true);
-
+            // console.error("Emitting ERROR in srv.js");
+            _add_old_listeners(true);
             socket.emit('error', error || new Error('No addresses to connect to'));
-	}
+        }
     };
 
     // Add our listeners
     socket.addListener('connect', onConnect);
     socket.addListener('error', onError);
     socket.addListener('timeout', onError);
-
     connectNext();
 }
 
-
 exports.removeListeners = removeListeners;
 
-
-// returns EventEmitter with 'connect' & 'error'
+// Emits either the 'connect' or the 'error; event on the 'socket'
+// object passed in.
 exports.connect = function(socket, services, domain, defaultPort, timeout) {
     // console.error("connect:services", services);
-
     timeout = timeout || 10000; // 10 sec timeout
     var tryServices;
     tryServices = function() {
         var service = services.shift();
         if (service) {
-	    // console.error("Trying to resolve SRV");
+            // console.error("Trying to resolve SRV");
             resolveSrv(service + '.' + domain, function(error, addrs) {
                 if (addrs) {
                     tryConnect(socket, addrs, timeout);
-		}
+                }
                 else {
                     tryServices();
-		}
+                }
             });
         } else {
-	    // console.error("Trying to resolve host");
+            // console.error("Trying to resolve host");
             resolveHost(domain, function(error, addrs) {
                 if (addrs && addrs.length > 0) {
                     addrs = addrs.map(function(addr) {
@@ -224,9 +253,9 @@ exports.connect = function(socket, services, domain, defaultPort, timeout) {
                     });
                     tryConnect(socket, addrs, timeout);
                 }
-		else {
+                else {
                     socket.emit('error', error || new Error('No addresses resolved for ' + domain));
-		}
+                }
             });
 
         } // if (service)

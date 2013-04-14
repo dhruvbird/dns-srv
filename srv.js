@@ -150,19 +150,22 @@ function removeListeners(emitter, events) {
         var _l = emitter.listeners(event);
         // Make a private copy (in case emitter.listeners() returns a
         // cached copy).
-        _events[event] = _l.splice(0, _l.length);
+        _events[event] = _l.concat([ ]);
+        emitter.removeAllListeners(event);
     });
 
     return function(prev_listeners_fate) {
+        console.log("Restoring old listeners");
         var _keys = Object.keys(_events).concat(getAllEvents(emitter));
         var done = { };
         _keys.forEach(function(event) {
             if (!done.hasOwnProperty(event)) {
+                console.log("Restore::event:", event);
                 // console.error("Re-attaching handler for the '" + event + "' event");
                 done[event] = 1;
-                // Ensure that _cl is an array we (and not the emitter) own.
-                var _cl = (_events[event] || [ ]).concat();
-                if (prev_listeners_fate === REMOVE_PREVIOUS_LISTENERS) {
+                var _cl = _events[event] || [ ];
+                if (prev_listeners_fate == REMOVE_PREVIOUS_LISTENERS) {
+                    console.log("Remove all listeners for event:", event);
                     emitter.removeAllListeners(event);
                 }
                 if (_cl.length > 0) {
@@ -184,11 +187,11 @@ function tryConnect(socket, addrs, timeout) {
     // console.error("tryConnect::", new Error().stack.toString());
 
     // Save original listeners
-    var _add_old_listeners = removeListeners(socket);
+    var _add_old_listeners = removeListeners(socket, [ 'connect', 'error', 'timeout' ]);
 
     var onConnect = function() {
         // console.error('srv.js::connected!!');
-        _add_old_listeners(true);
+        _add_old_listeners(REMOVE_PREVIOUS_LISTENERS);
         // done!
         socket.emit('connect');
     };

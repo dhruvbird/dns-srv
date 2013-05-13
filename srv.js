@@ -43,21 +43,24 @@ function groupSrvRecords(addrs) {
     var result = [];
     Object.keys(groups).sort(compareNumbers).forEach(function(priority) {
         var group = groups[priority];
-        var totalWeight = 0;
-        group.forEach(function(addr) {
-            totalWeight += addr.weight;
-        });
-        var w = Math.floor(Math.random() * totalWeight);
-        totalWeight = 0;
-        var candidate = group[0];
-        group.forEach(function(addr) {
-            totalWeight += addr.weight;
-            if (w < totalWeight) {
-                candidate = addr;
+        while (group.length > 0) {
+            var totalWeight = 0;
+            group.forEach(function(addr) {
+                totalWeight += addr.weight;
+            });
+            var w = Math.floor(Math.random() * totalWeight);
+            totalWeight = 0;
+            var candidate = group[0];
+            group.forEach(function(addr) {
+                totalWeight += addr.weight;
+                if (w < totalWeight) {
+                    candidate = addr;
+                }
+            });
+            if (candidate) {
+                result.push(candidate);
+                group.splice(group.indexOf(candidate), 1);
             }
-        });
-        if (candidate) {
-            result.push(candidate);
         }
     });
     return result;

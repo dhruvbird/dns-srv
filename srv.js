@@ -52,7 +52,7 @@ function groupSrvRecords(addrs) {
             // Select the next address (based on the relative weights)
             var w = Math.floor(Math.random() * totalWeight);
             var index = -1;
-            while (w > 0 && ++index < group.length) {
+            while (++index < group.length && w > 0) {
                 w -= group[index].weight;
             }
             if (index < group.length) {
@@ -72,7 +72,6 @@ function groupSrvRecords(addrs) {
 
 // one of both A & AAAA, in case of broken tunnels
 function resolveHost(name, cb) {
-    // console.error("resolveHost::", new Error().stack.toString());
     var error, results = [];
     var cb1 = function(e, addr) {
         error = error || e;
@@ -162,17 +161,13 @@ function removeListeners(emitter, events) {
     });
 
     return function(prev_listeners_fate) {
-        // console.log("Restoring old listeners");
         var _keys = Object.keys(_events).concat(getAllEvents(emitter));
         var done = { };
         _keys.forEach(function(event) {
             if (!done.hasOwnProperty(event)) {
-                // console.log("Restore::event:", event);
-                // console.error("Re-attaching handler for the '" + event + "' event");
                 done[event] = 1;
                 var _cl = _events[event] || [ ];
                 if (prev_listeners_fate == REMOVE_PREVIOUS_LISTENERS) {
-                    // console.log("Remove all listeners for event:", event);
                     emitter.removeAllListeners(event);
                 }
                 if (_cl.length > 0) {
@@ -191,13 +186,10 @@ function removeListeners(emitter, events) {
 
 // connection attempts to multiple addresses in a row
 function tryConnect(socket, addrs, timeout) {
-    // console.error("tryConnect::", new Error().stack.toString());
-
     // Save original listeners
     var _add_old_listeners = removeListeners(socket, [ 'connect', 'error', 'timeout' ]);
 
     var onConnect = function() {
-        // console.error('srv.js::connected!!');
         _add_old_listeners(REMOVE_PREVIOUS_LISTENERS);
         // done!
         socket.emit('connect');
@@ -205,7 +197,6 @@ function tryConnect(socket, addrs, timeout) {
 
     var error;
     var onError = function(e) {
-    // console.error("srv.js::onError, e:", e, addrs);
         if (!e) {
             socket.destroy();
         }
@@ -213,14 +204,12 @@ function tryConnect(socket, addrs, timeout) {
         connectNext();
     };
     var connectNext = function() {
-        // console.error("srv.js::addrs:", addrs);
         var addr = addrs.shift();
         if (addr) {
             socket.setTimeout(timeout, function() { });
             socket.connect(addr.port, addr.name);
         }
         else {
-            // console.error("Emitting ERROR in srv.js");
             _add_old_listeners(true);
             socket.emit('error', error || new Error('No addresses to connect to'));
         }
@@ -238,13 +227,11 @@ exports.removeListeners = removeListeners;
 // Emits either the 'connect' or the 'error; event on the 'socket'
 // object passed in.
 exports.connect = function(socket, services, domain, defaultPort, timeout) {
-    // console.error("connect:services", services);
     timeout = timeout || 10000; // 10 sec timeout
     var tryServices;
     tryServices = function() {
         var service = services.shift();
         if (service) {
-            // console.error("Trying to resolve SRV");
             resolveSrv(service + '.' + domain, function(error, addrs) {
                 if (addrs) {
                     tryConnect(socket, addrs, timeout);
@@ -254,7 +241,6 @@ exports.connect = function(socket, services, domain, defaultPort, timeout) {
                 }
             });
         } else {
-            // console.error("Trying to resolve host");
             resolveHost(domain, function(error, addrs) {
                 if (addrs && addrs.length > 0) {
                     addrs = addrs.map(function(addr) {

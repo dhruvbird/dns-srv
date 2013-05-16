@@ -43,25 +43,29 @@ function groupSrvRecords(addrs) {
     var result = [];
     Object.keys(groups).sort(compareNumbers).forEach(function(priority) {
         var group = groups[priority];
-        while (group.length > 0) {
-            var totalWeight = 0;
-            group.forEach(function(addr) {
-                totalWeight += addr.weight;
-            });
+        // Calculate the total weight for this priority group
+        var totalWeight = 0;
+        group.forEach(function(addr) {
+            totalWeight += addr.weight;
+        });
+        while (group.length > 1) {
+            // Select the next address (based on the relative weights)
             var w = Math.floor(Math.random() * totalWeight);
-            totalWeight = 0;
-            var candidate = group[0];
-            group.forEach(function(addr) {
-                totalWeight += addr.weight;
-                if (w < totalWeight) {
-                    candidate = addr;
-                }
-            });
-            if (candidate) {
-                result.push(candidate);
-                group.splice(group.indexOf(candidate), 1);
+            var index = -1;
+            while (w > 0 && ++index < group.length) {
+                w -= group[index].weight;
+            }
+            if (index < group.length) {
+                // Remove selected address from the group and add it to the
+                // result list.
+                var addr = group.splice(index, 1)[0];
+                result.push(addr);
+                // Adjust the total group weight accordingly
+                totalWeight -= addr.weight;
             }
         }
+        // Add the final address from this group
+        result.push(group[0]);
     });
     return result;
 }
@@ -158,17 +162,17 @@ function removeListeners(emitter, events) {
     });
 
     return function(prev_listeners_fate) {
-        console.log("Restoring old listeners");
+        // console.log("Restoring old listeners");
         var _keys = Object.keys(_events).concat(getAllEvents(emitter));
         var done = { };
         _keys.forEach(function(event) {
             if (!done.hasOwnProperty(event)) {
-                console.log("Restore::event:", event);
+                // console.log("Restore::event:", event);
                 // console.error("Re-attaching handler for the '" + event + "' event");
                 done[event] = 1;
                 var _cl = _events[event] || [ ];
                 if (prev_listeners_fate == REMOVE_PREVIOUS_LISTENERS) {
-                    console.log("Remove all listeners for event:", event);
+                    // console.log("Remove all listeners for event:", event);
                     emitter.removeAllListeners(event);
                 }
                 if (_cl.length > 0) {

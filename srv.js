@@ -30,6 +30,9 @@ function once(proc) {
     };
 }
 
+// Sorts the SRV lookup results first by priority, then randomising the server
+// order for a given priority. For discussion of handling of priority and
+// weighting, see https://github.com/dhruvbird/dns-srv/pull/4
 function groupSrvRecords(addrs) {
     var groups = {};  // by priority
     addrs.forEach(function(addr) {

@@ -3,7 +3,7 @@
   "name": "dns-srv",
   "main": "srv.js",
   "description": "A small library to help connect using DNS SRV records on node.js",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "homepage": "https://github.com/dhruvbird/dns-srv",
   "repository": {
     "type": "git",

@@ -1,10 +1,11 @@
 // -*-  tab-width:4; c-basic-offset: 4; indent-tabs-mode: nil  -*-
 
-// NOTE: NEVER re-attach OR trigger event handlers in a nextTick()
-// function. ALWAYS do it in the same tick since there might be
-// pending events and the semantics might need a sequential ordering
-// on the delivery of these events (for example the 'connect' and the
-// 'data' events need to come in the order they arrived).
+// NOTE: NEVER trigger the 'connect' event in a nextTick()
+// function. ALWAYS do it in the same tick since the sock on which the
+// 'connect' event was raised might raise a 'data' event in the same
+// tick and of the connect event on the SrvConnector object is raised
+// in the next tick, then at least one 'data' event might be lost by
+// the client.
 
 var dns    = require('dns');
 var events = require('events');

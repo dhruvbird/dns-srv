@@ -9,8 +9,17 @@
     "type": "git",
     "url": "git://github.com/dhruvbird/dns-srv.git"
   },
+  "maintainers": [
+    {
+      "name": "Dhruv Matani",
+      "email": "dhruvbird@gmail.com",
+      "web": "http://dhruvbird.com/"
+    }
+  ],
   "contributors": [
-    "Dhruv Matani <dhruvbird@gmail.com> (https://dhruvbird.com/)"
+    { "name": "Gavin Llewellyn",
+      "email": "gavin@llewnet.co.uk"
+    }
   ],
   "engines": {
     "node": ">=0.4.0"

@@ -6,7 +6,9 @@
 // on the delivery of these events (for example the 'connect' and the
 // 'data' events need to come in the order they arrived).
 
-var dns = require('dns');
+var dns    = require('dns');
+var events = require('events');
+var util   = require('util');
 
 const REMOVE_PREVIOUS_LISTENERS = true;
 const RETAIN_PREVIOUS_LISTENERS = false;
@@ -123,80 +125,61 @@ function resolveSrv(name, cb) {
     });
 }
 
-/* Enumerates all the events on 'emitter' and returns them as a list
- * of strings.
- */
-function getAllEvents(emitter) {
-    return Object.keys(emitter._events || { }).filter(function(event) {
-        return event !== 'maxListeners';
-    });
+function SrvConnector() {
 }
 
-/* This function removes all the event handlers for the event(s)
- * listen in 'events'. If 'events' in undefined, this function
- * enumerates all events on 'emitter' and removes them all. The return
- * value is a function which can be called to re-attach the removed
- * handlers.
- *
- * The only parameter that this returned function takes in a boolean
- * (true/false) which indicates whether existing handlers should be
- * removed (true) or kept (false) before re-attaching all the old
- * handlers. This applies for *all* events, not just events that will
- * be re-attached.
- *
- */
-function removeListeners(emitter, events) {
-    if (typeof events === 'undefined') {
-        events = getAllEvents(emitter);
-    } else if (typeof events === 'string') {
-        events = [ events ];
-    } else if (!(events instanceof Array)) {
-        throw new Error("'events' must be either undefined, a string, or an array of events");
-    }
+util.inherits(SrvConnector, events.EventEmitter);
 
-    var _events = { };
-    events.forEach(function(event) {
-        var _l = emitter.listeners(event);
-        // Make a private copy (in case emitter.listeners() returns a
-        // cached copy).
-        _events[event] = _l.concat([ ]);
-        emitter.removeAllListeners(event);
-    });
+// Emits either the 'connect' or the 'error' event on the 'this'
+// object.
+SrvConnector.prototype.connect = function(socket, services, domain, defaultPort, timeout) {
+    timeout = timeout || 10000; // 10 sec timeout
+    var tryServices;
+    tryServices = function() {
+        var service = services.shift();
+        if (service) {
+            resolveSrv(service + '.' + domain, function(error, addrs) {
+                if (addrs) {
+                    this.tryConnect(socket, addrs, timeout);
+                }
+                else {
+                    tryServices();
+                }
+            }.bind(this));
+        } else {
+            resolveHost(domain, function(error, addrs) {
+                if (addrs && addrs.length > 0) {
+                    addrs = addrs.map(function(addr) {
+                        return { name: addr,
+                                 port: defaultPort };
+                    });
+                    this.tryConnect(socket, addrs, timeout);
+                }
+                else {
+                    this.emit('error', error || new Error('No addresses resolved for ' + domain));
+                }
+            }.bind(this));
 
-    return function(prev_listeners_fate) {
-        var _keys = Object.keys(_events).concat(getAllEvents(emitter));
-        var done = { };
-        _keys.forEach(function(event) {
-            if (!done.hasOwnProperty(event)) {
-                done[event] = 1;
-                var _cl = _events[event] || [ ];
-                if (prev_listeners_fate == REMOVE_PREVIOUS_LISTENERS) {
-                    emitter.removeAllListeners(event);
-                }
-                if (_cl.length > 0) {
-                    if (!emitter._events[event]) {
-                        emitter._events[event] = [ ];
-                    } else if (!(emitter._events[event] instanceof Array)) {
-                        emitter._events[event] = [ emitter._events[event] ];
-                    }
-                    // emitter._events[event] is now an array.
-                    emitter._events[event] = emitter._events[event].concat(_cl);
-                }
-            }
-        });
-    };
-}
+        } // if (service)
+
+    }.bind(this); // tryServices()
+
+    // We start the process in the next tick so that if anything happens
+    // synchronously, then the event listeners that the user has added 
+    // on the socket object after calling connect() are also handled
+    // properly.
+    process.nextTick(tryServices);
+};
 
 // connection attempts to multiple addresses in a row
-function tryConnect(socket, addrs, timeout) {
-    // Save original listeners
-    var _add_old_listeners = removeListeners(socket, [ 'connect', 'error', 'timeout' ]);
-
+SrvConnector.prototype.tryConnect = function(socket, addrs, timeout) {
     var onConnect = function() {
-        _add_old_listeners(REMOVE_PREVIOUS_LISTENERS);
         // done!
-        socket.emit('connect');
-    };
+        socket.removeListener('connect', onConnect);
+        socket.removeListener('error',   onError);
+        socket.removeListener('timeout', onError);
+        this.emit('connect');
+    }.bind(this);
 
     var error;
     var onError = function(e) {
@@ -205,7 +188,7 @@ function tryConnect(socket, addrs, timeout) {
         }
         error = e || new Error('Connection timed out');
         connectNext();
-    };
+    }.bind(this);
     var connectNext = function() {
         var addr = addrs.shift();
         if (addr) {
@@ -213,10 +196,12 @@ function tryConnect(socket, addrs, timeout) {
             socket.connect(addr.port, addr.name);
         }
         else {
-            _add_old_listeners(true);
-            socket.emit('error', error || new Error('No addresses to connect to'));
+            socket.removeListener('connect', onConnect);
+            socket.removeListener('error',   onError);
+            socket.removeListener('timeout', onError);
+            this.emit('error', error || new Error('No addresses to connect to'));
         }
-    };
+    }.bind(this);
 
     // Add our listeners
     socket.addListener('connect', onConnect);
@@ -225,45 +210,10 @@ function tryConnect(socket, addrs, timeout) {
     connectNext();
 }
 
-exports.removeListeners = removeListeners;
-
-// Emits either the 'connect' or the 'error; event on the 'socket'
-// object passed in.
 exports.connect = function(socket, services, domain, defaultPort, timeout) {
-    timeout = timeout || 10000; // 10 sec timeout
-    var tryServices;
-    tryServices = function() {
-        var service = services.shift();
-        if (service) {
-            resolveSrv(service + '.' + domain, function(error, addrs) {
-                if (addrs) {
-                    tryConnect(socket, addrs, timeout);
-                }
-                else {
-                    tryServices();
-                }
-            });
-        } else {
-            resolveHost(domain, function(error, addrs) {
-                if (addrs && addrs.length > 0) {
-                    addrs = addrs.map(function(addr) {
-                        return { name: addr,
-                                 port: defaultPort };
-                    });
-                    tryConnect(socket, addrs, timeout);
-                }
-                else {
-                    socket.emit('error', error || new Error('No addresses resolved for ' + domain));
-                }
-            });
-
-        } // if (service)
-
-    }; // tryServices()
-
-    // We start the process in the next tick so that if anything happens
-    // synchronously, then the event listeners that the user has added 
-    // on the socket object after calling connect() are also handled
-    // properly.
-    process.nextTick(tryServices);
-};
+    var connector = new SrvConnector();
+    process.nextTick(function() {
+        connector.connect(socket, services, domain, defaultPort, timeout);
+    });
+    return connector;
+}
